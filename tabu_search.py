@@ -10,34 +10,91 @@ from scipy.special import bdtr
 import matplotlib.pyplot as plt
 
 class TabuSearchProblem(object):
+    '''
+    Extend this class and implement the methods required by the particular
+    solver in order to solve an instance of a problem expressed in terms
+    that can be used by a Tabu Search algorithm.
+    '''
     def __init__(self):
         pass
 
     def initial_solution(self):
+        '''
+        Return a (not necessarily) random solution to the problem at hand.
+        '''
         raise NotImplementedError
 
     def feasible_solution(self, node):
+        '''
+        Returns True if the solution(node) is feasible in the context of the
+        problem, you only need to implement this method if you plan on limiting
+        your search to the feasible search space.
+        '''
         raise NotImplementedError
 
-    def cost(self, node, amplification_parameter):
+    def cost(self, node, amplification_parameter=1):
+        '''
+        Returns the cost of solution(node) plus a infeasibility penalty times
+        an amplification_parameter, while the infeasibility penalty part is
+        optional, if you want to use infeasible solutions as part of your search
+        it becomes necessary.
+        '''
         raise NotImplementedError
 
     def neighbours(self, node):
+        '''
+        Given a solution(node) it returns its neighbourhood as a generator.
+        '''
         return map(lambda m: self.apply(node, m), self.movements(node))
 
     def movements(self, node):
+        '''
+        Given a solution(node) returns all the possible movements from it as
+        a generator.
+        '''
         raise NotImplementedError
 
     def apply(self, node, movement):
+        '''
+        Apply the movement to the solution(node)/move from one solution to
+        another in its neighbourhood.
+        '''
         raise NotImplementedError
 
     def address(self, node):
+        '''
+        This function is a mapping from the solution(node) to a number
+        representing a partition of the search space.
+
+        This method is only necessary if the solver implements a partitioned
+        search.
+        '''
         raise NotImplementedError
 
     def increment_address(self, node):
+        '''
+        Returns a new random solution that is in a different random partition
+        to the given one(node).
+
+        This method is only necessary if the solver implements a partitioned
+        search.
+        '''
         raise NotImplementedError
 
 class TabuSearchSolver(object):
+    '''
+    Extend this class and implement its methods in order to provide users with
+    a solver based on the Tabu Search algorithm.
+
+    Attributes:
+    - amplification_parameter: multiplies the penalty in the cost of infeasible
+        solutions. (default: 1)
+    - tabu_shrink_period, tabu_shrink_factor: every period iterations the tabu
+        list will shrink by factor(its maximum length is multiplied by it).
+        (default: 10, 0.96)
+    - infeasible_search: allow infeasible solutions to appear in our search.
+        (default: True)
+    '''
     def __init__(self, amplification_parameter=1, tabu_shrink_period=10,
                  tabu_shrink_factor=0.96, infeasible_search=True):
         self.amplification_parameter = amplification_parameter
@@ -47,8 +104,35 @@ class TabuSearchSolver(object):
         self.solution = None
 
     def solve(self, problem, max_local_iters, max_global_iters=None,
-              partitioned_search=False, figure_output=False):
+              partitioned_search=False, figure_output=None):
+        '''
+        Solve the problem given with the algorithm implemented by this solver,
+        arguments passed:
+        problem: the problem given (extends TabuSearchProblem)
+        max_local_iters: maximum number of iterations in a local search without
+            improving the best local solution found so far
+        max_global_iters: maximum number of global iterations without improving
+            the best solution found so far, if None max_global_iters = max_local_iters.
+            (default: None)
+        partitioned_search: search using the information provided about the
+            partitioning of the search space by problem. (default: False)
+        figure_output: if given a path to a file it will output a plot of the
+            convergence curve to it. (default: None)
+        '''
         raise NotImplementedError
+
+    @staticmethod
+    def generate_figure(x, y, x_name, y_name, figure_output):
+        '''
+        Outputs a plot of the curve given by the points x, y to the path
+        figure_output.
+        '''
+        plt.plot(x, y)
+        plt.ylabel(y_name)
+        plt.xlabel(x_name)
+        plt.ylim(4, 24)
+        plt.savefig(figure_output)
+        plt.close()
 
 class PartitionedSpaceSolver(TabuSearchSolver):
     def solve(self, problem, max_local_iters, max_global_iters=None,
@@ -140,15 +224,11 @@ class PartitionedSpaceSolver(TabuSearchSolver):
 #                    iters_feasible = self.feasible_solution(current_node)
                     max_tabu_len = max_local_iters
                     continue
+
         figure_iters.append(true_iters)
         figure_costs.append(problem.cost(best_solution, q))
-        if figure_output is not None:
-            plt.plot(figure_iters, figure_costs)
-            plt.ylabel("Cp")
-            plt.xlabel("Numero de iteraciones")
-            plt.ylim(4, 24)
-            plt.savefig(figure_output)
-            plt.close()
+        self.generate_figure(figure_iters, figure_costs, 'Cp', 'iteration', figure_output)
+
         self.solution = best_solution
         return self.solution
 
@@ -237,13 +317,15 @@ class RedundancyAllocationProblem(TabuSearchProblem):
 
     def discounted_cost_of_component(self, component_i, version, m):
         if m <= self.discounts[component_i][0][0]:
-            return self.components_characteristics[component_i, version*3+2] * m
+            return self.components_characteristics[component_i, version*3+2]*m
         elif m <= self.discounts[component_i][1][0]:
-            return self.components_characteristics[component_i, version*3+2] * self.discounts[component_i][0][1] * m
+            return (self.components_characteristics[component_i, version*3+2] *
+                    self.discounts[component_i][0][1] * m)
         else:
-            return self.components_characteristics[component_i, version*3+2] * self.discounts[component_i][1][1] * m
+            return (self.components_characteristics[component_i, version*3+2] *
+                    self.discounts[component_i][1][1] * m)
 
-    def cost(self, node, amplification_parameter):
+    def cost(self, node, amplification_parameter=1):
         res = 0
         for i in range(self.n_components):
             if self.discounts is not None:
@@ -320,7 +402,7 @@ class RedundancyAllocationProblem(TabuSearchProblem):
 #                res = deepcopy(node)
 #        return res
 
-def RAP_from_json(path):
+def rap_from_json(path):
     with open(path) as file:
         parsed = json.load(file)
         max_n_versions = max(map(lambda c: c['n_versions'], parsed['components_characteristics']))
@@ -344,7 +426,7 @@ def RAP_from_json(path):
 
 def test_solver(solver, problem_json, min_availability, max_local_iters=200,
                 max_global_iters=500, figure_output=None):
-    problem = RAP_from_json(problem_json)
+    problem = rap_from_json(problem_json)
     problem.min_availability = min_availability
 
     running_time = time.clock()
