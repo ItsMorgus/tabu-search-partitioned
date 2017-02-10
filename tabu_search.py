@@ -135,6 +135,10 @@ class TabuSearchSolver(object):
         plt.close()
 
 class PartitionedSpaceSolver(TabuSearchSolver):
+    '''
+    Implements Tabu Search taking advantage of a partitioning of the search
+    space.
+    '''
     def solve(self, problem, max_local_iters, max_global_iters=None,
               partitioned_search=False, figure_output=None):
         if max_global_iters is None:
@@ -145,88 +149,78 @@ class PartitionedSpaceSolver(TabuSearchSolver):
         global_iters = 0
         local_iters = 0
 
+        # initialize solutions
         best_solution = problem.initial_solution()
+        best_solution_cost = problem.cost(best_solution, self.amplification_parameter)
         best_local_solution = best_solution
-        q = self.amplification_parameter
+        best_local_solution_cost = problem.cost(best_local_solution, self.amplification_parameter)
 
-        figure_iters = []
-        figure_costs = []
+        if figure_output is not None:
+            figure_iters = []
+            figure_costs = []
 
+        # initialize search
         current_node = best_solution
         tabu_list = []
         max_tabu_len = max_local_iters
 
-#        same_kind_iters = 0
-#        iters_feasible = self.feasible_solution(current_node)
-
         while True:
+            # shrink tabu list
             if (local_iters + 1) % self.tabu_shrink_period == 0:
                 max_tabu_len = math.floor(max_tabu_len*self.tabu_shrink_factor)
-
-#            if self.feasible_solution(current_node) == iters_feasible:
-#                same_kind_iters += 1
-#                if same_kind_iters >= amplification_period:
-#                    if iters_feasible:
-#                        q = max(q/2, self.cost(best_solution, 0))
-#                    else:
-#                        q = min(q*2, math.factorial(100))
-#            else:
-#                same_kind_iters = 0
-#                iters_feasible = not iters_feasible
 
             possible_moves = list(
                 filter(
                     lambda n: n not in tabu_list and
                     (self.infeasible_search or problem.feasible_solution(n)),
                     problem.neighbours(current_node)))
-            if not possible_moves:
+
+            if not possible_moves or local_iters > max_local_iters:
                 if global_iters > max_global_iters:
                     break
+                
+                # reset local search
                 tabu_list = []
                 local_iters = 0
                 best_local_solution = problem.increment_address(current_node)
+                best_local_solution_cost = problem.cost(best_local_solution,
+                                                        self.amplification_parameter)
                 current_node = best_local_solution
-                #q = amplification_parameter
-#                same_kind_iters = 0
-#                iters_feasible = self.feasible_solution(current_node)
                 max_tabu_len = max_local_iters
                 continue
 
-            best_move = min(possible_moves, key=lambda m: problem.cost(m, q))
+            best_move = min(possible_moves,
+                            key=lambda m: problem.cost(m, self.amplification_parameter))
 
-            if problem.cost(best_move, q) < problem.cost(best_solution, q):
+            if (problem.cost(best_move, self.amplification_parameter) <
+                    best_solution_cost):
+
                 best_solution = best_move
+                best_solution_cost = problem.cost(best_move,
+                                                  self.amplification_parameter)
                 global_iters = 0
                 figure_iters.append(true_iters)
-                figure_costs.append(problem.cost(best_solution, q))
+                figure_costs.append(best_solution_cost)
 
-            if problem.cost(best_move, q) < problem.cost(best_local_solution, q):
+            if problem.cost(best_move, self.amplification_parameter) < best_local_solution_cost:
+
                 best_local_solution = best_move
+                best_local_solution_cost = problem.cost(best_move,
+                                                        self.amplification_parameter)
                 local_iters = 0
 
             current_node = best_move
             tabu_list.append(best_move)
+
             local_iters += 1
             global_iters += 1
             true_iters += 1
+            
             if len(tabu_list) > max_tabu_len:
                 del tabu_list[0:len(tabu_list) - max_tabu_len]
-            if local_iters > max_local_iters:
-                if global_iters > max_global_iters:
-                    break
-                else:
-                    tabu_list = []
-                    local_iters = 0
-                    best_local_solution = problem.increment_address(current_node)
-                    current_node = best_local_solution
-                    #q = amplification_parameter
-#                    same_kind_iters = 0
-#                    iters_feasible = self.feasible_solution(current_node)
-                    max_tabu_len = max_local_iters
-                    continue
 
         figure_iters.append(true_iters)
-        figure_costs.append(problem.cost(best_solution, q))
+        figure_costs.append(best_solution_cost)
         self.generate_figure(figure_iters, figure_costs, 'Cp', 'iteration', figure_output)
 
         self.solution = best_solution
@@ -455,7 +449,7 @@ if __name__ == '__main__':
                 figure_output='convergence-lev4-(4-6)-3-0900.png')
     test_solver(DEFAULT_SOLVER, 'lev4-(4-6)-3.json', min_availability=0.96,
                 max_local_iters=200, max_global_iters=500,
-                figure_output='convergence-lev4-(4-6)-3-0900.png')
+                figure_output='convergence-lev4-(4-6)-3-0960.png')
     test_solver(DEFAULT_SOLVER, 'lev4-(4-6)-3.json', min_availability=0.99,
                 max_local_iters=200, max_global_iters=500,
-                figure_output='convergence-lev4-(4-6)-3-0900.png')
+                figure_output='convergence-lev4-(4-6)-3-0990.png')
