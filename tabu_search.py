@@ -155,6 +155,7 @@ class PartitionedSpaceSolver(TabuSearchSolver):
         best_local_solution = best_solution
         best_local_solution_cost = problem.cost(best_local_solution, self.amplification_parameter)
 
+        # initialize the lists to be used for the convergence curve
         if figure_output is not None:
             figure_iters = []
             figure_costs = []
@@ -178,7 +179,7 @@ class PartitionedSpaceSolver(TabuSearchSolver):
             if not possible_moves or local_iters > max_local_iters:
                 if global_iters > max_global_iters:
                     break
-                
+
                 # reset local search
                 tabu_list = []
                 local_iters = 0
@@ -198,15 +199,21 @@ class PartitionedSpaceSolver(TabuSearchSolver):
                 best_solution = best_move
                 best_solution_cost = problem.cost(best_move,
                                                   self.amplification_parameter)
+
+                # We found a better solution so we set to 0 the number of iters
                 global_iters = 0
-                figure_iters.append(true_iters)
-                figure_costs.append(best_solution_cost)
+
+                if figure_output is not None:
+                    figure_iters.append(true_iters)
+                    figure_costs.append(best_solution_cost)
 
             if problem.cost(best_move, self.amplification_parameter) < best_local_solution_cost:
 
                 best_local_solution = best_move
                 best_local_solution_cost = problem.cost(best_move,
                                                         self.amplification_parameter)
+
+                # We found a better solution so we set to 0 the number of iters
                 local_iters = 0
 
             current_node = best_move
@@ -215,13 +222,14 @@ class PartitionedSpaceSolver(TabuSearchSolver):
             local_iters += 1
             global_iters += 1
             true_iters += 1
-            
+
             if len(tabu_list) > max_tabu_len:
                 del tabu_list[0:len(tabu_list) - max_tabu_len]
 
-        figure_iters.append(true_iters)
-        figure_costs.append(best_solution_cost)
-        self.generate_figure(figure_iters, figure_costs, 'Cp', 'iteration', figure_output)
+        if figure_output is not None:
+            figure_iters.append(true_iters)
+            figure_costs.append(best_solution_cost)
+            self.generate_figure(figure_iters, figure_costs, 'Cp', 'iteration', figure_output)
 
         self.solution = best_solution
         return self.solution
@@ -233,7 +241,8 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         '''
         n_components: number of parallel subsystems connected in series
         max_components: maximum number of components in each parallel subsystem (list)
-        component_characteristics: tuple of 3 lists of lists:
+        max_versions: maximum number of versions for each component(list)
+        component_characteristics: numpy array containing:
         - reliability per unit for each combination of component and version
         - cost per unit for each combination of component and version
         - performance per unit for each combination of component and version
@@ -246,8 +255,6 @@ class RedundancyAllocationProblem(TabuSearchProblem):
             threshold for a given component along with the discount applied
             and the second pair is analogous to the first one but for a higher
             units bought threshold
-        infeasible_search(optional): if True the search will admit as a valid
-            movement a infeasible solution
         '''
         super(RedundancyAllocationProblem, self).__init__()
         self.solution = None
@@ -270,6 +277,9 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         return tuple(res)
 
     def random_solution(self):
+        '''
+        Returns a random solution for the problem.
+        '''
         res = [[], []]
         for i in range(self.n_components):
             res[0].append(random.randint(1, self.max_components[i]))
@@ -277,6 +287,10 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         return tuple(res)
 
     def success_probability(self, node, min_performance):
+        '''
+        Returns the probability that the system defined by node will reach
+        min_performance
+        '''
         parallel_probabilities = [] # per-subsystem success
 
         if min_performance <= 0:
@@ -333,6 +347,9 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         return max(0, self.min_availability - self.availability(node))
 
     def half_movements_negative(self, node):
+        '''
+        Returns a list of all possible negative movements.
+        '''
         res = []
         for i in range(self.n_components):
             if node[0][i] > 1:
@@ -342,6 +359,9 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         return res
 
     def half_movements_positive(self, node):
+        '''
+        Returns a list of all possible positive movements.
+        '''
         res = []
         for i in range(self.n_components):
             if node[0][i] < self.max_components[i]:
@@ -351,6 +371,8 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         return res
 
     def movements(self, node):
+        # All the possible movements can be defined as the cartesian product
+        # between the positive and negative half-moves
         return itertools.product(self.half_movements_positive(node),
                                  self.half_movements_negative(node))
 
@@ -362,6 +384,11 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         return res
 
     def address(self, node):
+        '''
+        The address in this problem can be defined as the sum of the number of
+        elements per subsystem plus the sum of the version numbers for each
+        component.
+        '''
         return sum(node[0]) + sum(node[1])
 
     def increment_address(self, node):
@@ -370,33 +397,13 @@ class RedundancyAllocationProblem(TabuSearchProblem):
         while self.address(res) == self.address(node):
             res = self.random_solution()
         return res
-        # discarded code
-#        final_address = random.randint(self.n_components, self.N)
-#        while final_address == self.address(node):
-#            final_address = random.randint(self.n_components, self.N)
-#        increment = final_address - self.address(node)
-#        if increment > 0:
-#            movement_pool = self.half_movements_positive
-#        elif increment < 0:
-#            movement_pool = self.half_movements_negative
-#        res = deepcopy(node)
-#        while self.address(res) != final_address:
-#            if movement_pool(res):
-#                res = self.half_apply(res, random.choice(movement_pool(res)))
-#            else:
-#                final_address = random.randint(self.n_components, self.N)
-#                while final_address == self.address(node):
-#                    final_address = random.randint(self.n_components, self.N)
-#                increment = final_address - self.address(node)
-#
-#                if increment > 0:
-#                    movement_pool = self.half_movements_positive
-#                elif increment < 0:
-#                    movement_pool = self.half_movements_negative
-#                res = deepcopy(node)
-#        return res
 
 def rap_from_json(path):
+    '''
+    Generates a RedundancyAllocationProblem from a json file.
+
+    Look at lev4-(4-6)-3.json to see what the file must look like.
+    '''
     with open(path) as file:
         parsed = json.load(file)
         max_n_versions = max(map(lambda c: c['n_versions'], parsed['components_characteristics']))
