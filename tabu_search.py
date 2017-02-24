@@ -229,7 +229,7 @@ class PartitionedSpaceSolver(TabuSearchSolver):
         if figure_output is not None:
             figure_iters.append(true_iters)
             figure_costs.append(best_solution_cost)
-            self.generate_figure(figure_iters, figure_costs, 'Cp', 'iteration', figure_output)
+            self.generate_figure(figure_iters, figure_costs, 'iteration', 'Cp', figure_output)
 
         self.solution = best_solution
         return self.solution
@@ -393,9 +393,31 @@ class RedundancyAllocationProblem(TabuSearchProblem):
 
     def increment_address(self, node):
         # increment address randomly
+        addr = random.randint(self.n_components, self.N)
+        while addr == self.address(node):
+            addr = random.randint(self.n_components, self.N)
         res = self.random_solution()
-        while self.address(res) == self.address(node):
-            res = self.random_solution()
+        diff = self.address(res) - addr
+        while diff < 0:
+            for i in range(self.n_components):
+                if diff >= 0:
+                    break
+                if res[0][i] < self.max_components[i]:
+                    res[0][i] += 1
+                    diff += 1
+                if diff < 0 and res[1][i] < self.max_versions[i] - 1:
+                    res[1][i] += 1
+                    diff += 1
+        while diff > 0:
+            for i in range(self.n_components):
+                if diff <= 0:
+                    break
+                if res[0][i] > 1:
+                    res[0][i] -= 1
+                    diff -= 1
+                if diff > 0 and res[1][i] > 0:
+                    res[1][i] -= 1
+                    diff -= 1
         return res
 
 def rap_from_json(path):
