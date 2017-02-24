@@ -122,15 +122,22 @@ class TabuSearchSolver(object):
         raise NotImplementedError
 
     @staticmethod
-    def generate_figure(x, y, x_name, y_name, figure_output):
+    def generate_figure(x, y, x_name, y_name, figure_output, x2= None, y2=None, y2_name=None):
         '''
         Outputs a plot of the curve given by the points x, y to the path
         figure_output.
         '''
-        plt.plot(x, y)
-        plt.ylabel(y_name)
-        plt.xlabel(x_name)
-        plt.ylim(4, 24)
+        fig, ax1 = plt.subplots()
+        ax1.plot(x, y, 'b-')
+        ax1.set_xlabel(x_name)
+        ax1.set_ylabel(y_name, color='b')
+        ax1.tick_params('y', colors='b')
+
+        if x2 is not None and y2 is not None and y2_name is not None:
+            ax2 = ax1.twinx()
+            ax2.plot(x2, y2, 'r_')
+            ax2.set_ylabel(y2_name, color='r')
+            ax2.tick_params('y', colors='r')
         plt.savefig(figure_output)
         plt.close()
 
@@ -150,7 +157,7 @@ class PartitionedSpaceSolver(TabuSearchSolver):
         local_iters = 0
 
         # initialize solutions
-        best_solution = problem.initial_solution()
+        best_solution = problem.increment_address(problem.initial_solution())
         best_solution_cost = problem.cost(best_solution, self.amplification_parameter)
         best_local_solution = best_solution
         best_local_solution_cost = problem.cost(best_local_solution, self.amplification_parameter)
@@ -159,6 +166,8 @@ class PartitionedSpaceSolver(TabuSearchSolver):
         if figure_output is not None:
             figure_iters = []
             figure_costs = []
+            figure_address = [problem.address(best_solution)]
+            figure_address_iters = [0]
 
         # initialize search
         current_node = best_solution
@@ -188,6 +197,11 @@ class PartitionedSpaceSolver(TabuSearchSolver):
                                                         self.amplification_parameter)
                 current_node = best_local_solution
                 max_tabu_len = max_local_iters
+
+                if figure_output is not None:
+                    figure_address.append(problem.address(best_local_solution))
+                    figure_address_iters.append(true_iters)
+
                 continue
 
             best_move = min(possible_moves,
@@ -229,7 +243,9 @@ class PartitionedSpaceSolver(TabuSearchSolver):
         if figure_output is not None:
             figure_iters.append(true_iters)
             figure_costs.append(best_solution_cost)
-            self.generate_figure(figure_iters, figure_costs, 'iteration', 'Cp', figure_output)
+            self.generate_figure(figure_iters, figure_costs, 'iteration', 'Cp',
+                                 figure_output, x2=figure_address_iters,
+                                 y2=figure_address, y2_name='address')
 
         self.solution = best_solution
         return self.solution
